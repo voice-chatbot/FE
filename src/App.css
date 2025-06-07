@@ -4,7 +4,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: white;
+  background-color: black;
 }
 
 .App-logo {
@@ -143,4 +143,18 @@
   100% {
     transform: scale(1);
   }
+}
+
+@keyframes wave {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.5);
+  }
+}
+
+.animate-wave {
+  animation: wave 1s ease-in-out infinite;
 }
