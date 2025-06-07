@@ -115,14 +115,17 @@ function App() {
     if (!room) return;
     setStatus((prev) => ({ ...prev, isConnecting: true }));
     try {
-      const url = "wss://chat-e7jp6qc0.livekit.cloud";
+      const url = process.env.REACT_APP_LIVEKIT_URL;
 
-      const response = await fetch("http://localhost:5000/getToken", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await fetch(
+        process.env.REACT_APP_BACKEND_URL + "/getToken",
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
