@@ -7,13 +7,14 @@ import { ThreeDot } from "react-loading-indicators";
 
 function App() {
   const [room, setRoom] = useState(null);
-  const [isRecording, setIsRecording] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [isConnected, setIsConnected] = useState(false);
+  const [status, setStatus] = useState({
+    isRecording: false,
+    isConnected: false,
+    isConnecting: false,
+    isProcessing: false,
+  });
   const audioRef = useRef(null);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [waveformData, setWaveformData] = useState([]);
-  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     // Initialize LiveKit room
@@ -27,12 +28,12 @@ function App() {
         // Handle room events
         room.on(RoomEvent.Connected, () => {
           console.log("Connected to room");
-          setIsConnected(true);
+          setStatus((prev) => ({ ...prev, isConnected: true }));
         });
 
         room.on(RoomEvent.Disconnected, () => {
           console.log("Disconnected from room");
-          setIsConnected(false);
+          setStatus((prev) => ({ ...prev, isConnected: false }));
         });
 
         // Handle incoming audio from backend
@@ -45,7 +46,7 @@ function App() {
               participant.identity === "backend-bot"
             ) {
               console.log("Received audio from backend");
-              setIsProcessing(false); // Reset processing state when audio is received
+              setStatus((prev) => ({ ...prev, isProcessing: false })); // Reset processing state when audio is received
               const audioElement = audioRef.current;
               if (audioElement) {
                 // Attach the track to the audio element
@@ -110,24 +111,9 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    const animateWaveform = () => {
-      const newData = Array.from({ length: 50 }, (_, i) => ({
-        height: isRecording
-          ? Math.random() * 60 + 10
-          : Math.sin(i * 0.2 + Date.now() * 0.001) * 20 + 30,
-        opacity: isRecording ? Math.random() * 0.8 + 0.2 : 0.6,
-      }));
-      setWaveformData(newData);
-    };
-
-    const interval = setInterval(animateWaveform, 50);
-    return () => clearInterval(interval);
-  }, [isRecording]);
-
   const connectToRoom = async () => {
     if (!room) return;
-    setIsConnecting(true);
+    setStatus((prev) => ({ ...prev, isConnecting: true }));
     try {
       const url = "wss://chat-e7jp6qc0.livekit.cloud";
 
@@ -146,7 +132,7 @@ function App() {
       console.log({ token });
 
       await room.connect(url, token);
-      setIsConnecting(false);
+      setStatus((prev) => ({ ...prev, isConnecting: false }));
     } catch (error) {
       console.error("Error connecting to room");
       setMessages((prev) => [
@@ -160,13 +146,13 @@ function App() {
   };
 
   const startRecording = async () => {
-    if (!room || !isConnected) {
+    if (!room || !status.isConnected) {
       console.error("Not connected to room");
       return;
     }
 
     try {
-      setIsRecording(true);
+      setStatus((prev) => ({ ...prev, isRecording: true }));
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const audioTrack = stream.getAudioTracks()[0];
       console.log({ audioTrack });
@@ -194,7 +180,7 @@ function App() {
   };
 
   const stopRecording = async () => {
-    if (!room || !isRecording) return;
+    if (!room || !status.isRecording) return;
 
     try {
       // Get all tracks from the local participant
@@ -205,8 +191,11 @@ function App() {
           await room.localParticipant.unpublishTrack(publication.track);
         }
       }
-      setIsRecording(false);
-      setIsProcessing(true); // Set processing state when recording stops
+      setStatus((prev) => ({
+        ...prev,
+        isRecording: false,
+        isProcessing: true,
+      }));
       setMessages((prev) => [
         ...prev,
         {
@@ -231,7 +220,7 @@ function App() {
     if (room) {
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         if (track.kind === "audio" && participant.identity === "backend-bot") {
-          setIsProcessing(false); // Reset processing state when audio track is received
+          setStatus((prev) => ({ ...prev, isProcessing: false })); // Reset processing state when audio track is received
         }
       });
     }
@@ -240,19 +229,19 @@ function App() {
   const generateWaveform = () => {
     const bars = [];
     for (let i = 0; i < 50; i++) {
-      const height = isRecording
+      const height = status.isRecording
         ? Math.random() * 60 + 10
         : Math.sin(i * 0.2) * 20 + 30;
       bars.push(
         <div
           key={i}
           className={`bg-gradient-to-t from-purple-500 to-pink-400 rounded-full transition-all duration-150 ${
-            isRecording ? "animate-wave" : ""
+            status.isRecording ? "animate-wave" : ""
           }`}
           style={{
             height: `${height}px`,
             width: "3px",
-            opacity: isRecording ? Math.random() * 0.8 + 0.2 : 0.6,
+            opacity: status.isRecording ? Math.random() * 0.8 + 0.2 : 0.6,
             animationDelay: `${i * 0.02}s`,
           }}
         />
@@ -260,7 +249,7 @@ function App() {
     }
     return bars;
   };
-  console.log({ isRecording });
+
   return (
     <div className="App">
       <div className="chatbot-container">
@@ -269,13 +258,6 @@ function App() {
           <h1 className="text-5xl font-bold text-white">AI Voice Chatbot</h1>
         </div>
         <div className="chat-interface">
-          {/* <div className="messages">
-            {messages.map((msg, index) => (
-              <div key={index} className={`message ${msg.type}`}>
-                {msg.content}
-              </div>
-            ))}
-          </div> */}
           <div className="relative mb-12">
             <div className="flex items-end justify-center space-x-1 h-32 mb-8">
               {generateWaveform()}
@@ -286,38 +268,42 @@ function App() {
           </div>
           <p className="text-lg mb-6 text-gray-300">How can I help you?</p>
           <div className="controls flex flex-col items-center">
-            {!isConnected ? (
+            {!status.isConnected ? (
               <button
                 className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-3 rounded-full text-lg font-medium transition-all duration-200 transform hover:scale-105"
                 onClick={connectToRoom}
               >
-                {isConnecting ? <ThreeDot color="white" /> : "Connect to Chat"}
+                {status.isConnecting ? (
+                  <ThreeDot color="white" />
+                ) : (
+                  "Connect to Chat"
+                )}
               </button>
             ) : (
               <button
                 className={`w-16 h-16 rounded-full transition-all duration-200 transform hover:scale-110 flex items-center justify-center ${
-                  isRecording
+                  status.isRecording
                     ? "bg-red-500 hover:bg-red-600 animate-pulse"
-                    : isProcessing
+                    : status.isProcessing
                     ? "bg-yellow-500 hover:bg-yellow-600"
                     : "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                 }`}
-                onClick={isRecording ? stopRecording : startRecording}
-                disabled={isProcessing}
+                onClick={status.isRecording ? stopRecording : startRecording}
+                disabled={status.isProcessing}
               >
-                {isRecording ? (
+                {status.isRecording ? (
                   <CiMicrophoneOff className="w-6 h-6 text-white" />
                 ) : (
                   <CiMicrophoneOn className="w-6 h-6 text-white" />
                 )}
               </button>
             )}
-            {isRecording && (
+            {status.isRecording && (
               <p className="text-sm text-gray-400 mt-4 animate-pulse">
                 Listening...
               </p>
             )}
-            {isProcessing && (
+            {status.isProcessing && (
               <p className="text-sm text-gray-400 mt-4 animate-pulse">
                 Processing your request...
               </p>
